@@ -1,0 +1,125 @@
+---
+resources:
+- name: resource-git-cookbook_api
+  type: git
+  source:
+    uri: {{git-url}}
+    branch: {{git-branch}}
+    username: {{git-user}}
+    private_key: {{git-private-key}}
+- name: resource-cf-deploy-cookbook_api
+  type: cf
+  source:
+    api: {{cf-api}}
+    username: {{cf-user}}
+    password: {{cf-password}}
+    organization: {{cf-org}}
+    space: {{cf-space}}
+    skip_cert_check: false
+- name: resource-release-onboarding_api
+  type: github-release
+  source:
+    owner: {{git-release-owner}}
+    repository: {{git-release-repository}}
+    access_token: {{git-release-access_token}}
+jobs:
+  - name: run-test
+    public: true
+    plan:
+    - get: resource-git-cookbook_api
+      trigger: true
+    - task: run-test
+      file: resource-git-cookbook_api/ci/tasks/run-test.yml
+     
+  - name: build-int
+    public: true
+    plan:
+    - get: resource-git-cookbook_api
+      passed: [run-test]
+      trigger: true
+    - task: build-int
+      file: resource-git-cookbook_api/ci/tasks/build.yml
+      on_success:
+        do:
+        - put: resource-release-onboarding_api
+          params:
+            name: resource-git-cookbook_api/release.txt
+            tag: resource-git-cookbook_api/release.txt
+            globs:
+            - jarFile/*.jar
+     
+  - name: deploy
+    public: true
+    plan:
+    - get: resource-git-cookbook_api
+      passed: [build-int]
+      trigger: true
+    - task: deploy
+      file: resource-git-cookbook_api/ci/tasks/build.yml
+    - task: get-current-app-color
+      file: resource-git-cookbook_api/ci/tasks/current-app-get-info.yml
+      params:
+        PWS_APP_SUFFIX: {{pws-app-suffix}}
+        PWS_API: {{cf-api}}
+        PWS_ORG: {{cf-org}}
+        PWS_USER: {{cf-user}}
+        PWS_PWD: {{cf-password}}
+        PWS_SPACE: {{cf-space}}
+    - task: prepare-app-manifest
+      file: resource-git-cookbook_api/ci/tasks/app-manifest-prep.yml
+      params:
+        PWS_APP_SUFFIX_NEW: {{pws-app-suffix-new}}    
+    - put: resource-cf-deploy-cookbook_api
+      params:
+        manifest: app-manifest-output/manifest.yml
+        path: jarFile/*.jar
+      on_success:
+        do:
+        - task: deploy-email-content
+          config:
+            platform: linux
+            inputs:
+            - name: resource-git-cookbook_api
+            outputs:
+            - name: deploy-email-contents
+            image_resource:
+              type: docker-image
+              source: { repository: pallet/git-client}
+            run:
+              path: sh
+              args:
+              - -exc
+              - |
+                LAST_COMMIT_HASH=$(cd resource-git-cookbook_api && git log -1 |grep commit | cut -d' ' -f2)
+                LAST_COMMIT_DETAILS=$(cd resource-git-cookbook_api && git log -1 --name-status)
+                echo "Deploy Successful  for commit -  ${LAST_COMMIT_HASH}" >> deploy-email-contents/subject.txt
+                echo "Deploy Successful for commit - ${LAST_COMMIT_DETAILS}" >> deploy-email-contents/body.txt
+       
+            
+  - name: promote-new-version
+    serial: true
+    public: true
+    plan:
+    - get: resource-git-cookbook_api
+      passed: [deploy]
+      trigger: true
+    - task: get-current-app-color
+      file: resource-git-cookbook_api/ci/tasks/current-app-get-info.yml
+      params:
+        PWS_APP_SUFFIX: {{pws-app-suffix}}
+        PWS_API: {{cf-api}}
+        PWS_ORG: {{cf-org}}
+        PWS_USER: {{cf-user}}
+        PWS_PWD: {{cf-password}}
+        PWS_SPACE: {{cf-space}}
+    - task: switch-app-routes
+      file: resource-git-cookbook_api/ci/tasks/update-routes.yml
+      params:
+        PWS_APP_SUFFIX: {{pws-app-suffix}}
+        PWS_APP_SUFFIX_NEW: {{pws-app-suffix-new}}
+        PWS_APP_DOMAIN: {{pws-app-domain}}
+        PWS_API: {{cf-api}}
+        PWS_ORG: {{cf-org}}
+        PWS_USER: {{cf-user}}
+        PWS_PWD: {{cf-password}}
+        PWS_SPACE: {{cf-space}}

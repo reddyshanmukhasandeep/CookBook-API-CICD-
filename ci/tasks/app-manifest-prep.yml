@@ -1,0 +1,18 @@
+---
+platform: linux
+
+image_resource:
+  type: docker-image
+  source:
+    repository: pivotalservices/docker-concourse-cf-tools
+    tag: latest
+
+inputs:
+- name: resource-git-cookbook_api
+- name: current-app-info
+
+outputs:
+- name: app-manifest-output
+
+run:
+  path: resource-git-cookbook_api/ci/tasks/app-manifest-prep.sh

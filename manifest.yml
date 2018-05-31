@@ -1,0 +1,7 @@
+---
+applications:
+- name: APPNAME
+  memory: 1G
+  instances: 1
+  services:  
+    - cookbookdb

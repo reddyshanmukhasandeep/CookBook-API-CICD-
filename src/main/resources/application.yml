@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/cookbook
+    username: root
+    password: deyva
+    driver-class-name: com.mysql.jdbc.Driver
+  jpa:
+    hibernate.ddl-auto: update
+    properties.hibernate.dialect: org.hibernate.dialect.MySQL5Dialect
+    properties.hibernate.show_sql: true
+    properties.hibernate.use_sql_comments: true
+  data:
+    elasticsearch.cluster-nodes: 54.255.250.49:9300
+    elasticsearch.cluster-name: elasticsearch
+ 
+security:
+  basic:
+    enabled: false
+server.port: 8080
